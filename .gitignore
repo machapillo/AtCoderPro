@@ -1,0 +1,10 @@
+.vs/
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.env
+TempSolution/bin/
+TempSolution/obj/

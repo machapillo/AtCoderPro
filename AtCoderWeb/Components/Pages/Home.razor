@@ -1,0 +1,85 @@
+﻿@page "/"
+@using AtCoderWeb.Services
+@inject AtCoderService BotService
+@implements IDisposable
+
+<PageTitle>AtCoder Bot</PageTitle>
+
+<div class="container mt-4">
+    <h1>AtCoder Auto-Solver</h1>
+    
+    <div class="card p-3 mb-3">
+        <div class="row g-3">
+            <div class="col-md-8">
+                <input type="text" class="form-control" placeholder="Contest URL (e.g. https://atcoder.jp/contests/ahc058)" 
+                       @bind="contestUrl" />
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary" @onclick="Start" disabled="@isRunning">Start</button>
+                <button class="btn btn-danger" @onclick="Stop" disabled="@(!isRunning)">Stop</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-dark text-white p-3" style="height: 400px; overflow-y: auto; font-family: monospace;">
+        @foreach (var log in logs)
+        {
+            <div>@log</div>
+        }
+    </div>
+</div>
+
+@code {
+    private string contestUrl = "https://atcoder.jp/contests/ahc058";
+    private bool isRunning = false;
+    private List<string> logs = new();
+
+    protected override void OnInitialized()
+    {
+        BotService.OnLog += HandleLog;
+    }
+
+    private async Task Start()
+    {
+        if (string.IsNullOrWhiteSpace(contestUrl)) return;
+        
+        isRunning = true;
+        logs.Clear();
+        logs.Add("Starting bot...");
+        
+        // Run in background to not block UI
+        _ = Task.Run(async () => 
+        {
+            try 
+            {
+                await BotService.StartAsync(contestUrl);
+            }
+            finally
+            {
+                await InvokeAsync(() => {
+                    isRunning = false;
+                    StateHasChanged();
+                });
+            }
+        });
+    }
+
+    private async Task Stop()
+    {
+        await BotService.StopAsync();
+    }
+
+    private void HandleLog(string message)
+    {
+        // Update UI thread
+        InvokeAsync(() => {
+            logs.Add(message);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        BotService.OnLog -= HandleLog;
+    }
+}
