@@ -8,3 +8,5 @@ obj/
 .env
 TempSolution/bin/
 TempSolution/obj/
+
+*.log

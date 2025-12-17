@@ -5,54 +5,156 @@
 
 <PageTitle>AtCoder Bot</PageTitle>
 
+<style>
+    /* Fix duplication in MathJax/KaTeX rendering (hide accessible MathML) */
+    .katex-mathml { display: none !important; }
+    .MathJax_Preview { display: none !important; }
+    
+    /* Improve readability */
+    .card-body p { margin-bottom: 0.8rem; }
+    var { font-style: normal; font-family: Consolas, monospace; background: #f0f0f0; padding: 0 4px; border-radius: 3px; }
+</style>
+
 <div class="container mt-4">
     <h1>AtCoder Auto-Solver</h1>
     
     <div class="card p-3 mb-3">
         <div class="row g-3">
-            <div class="col-md-8">
-                <input type="text" class="form-control" placeholder="Contest URL (e.g. https://atcoder.jp/contests/ahc058)" 
+            <div class="col-md-6">
+                <label class="form-label">Contest URL</label>
+                <input type="text" class="form-control" placeholder="https://atcoder.jp/contests/..." 
                        @bind="contestUrl" />
             </div>
-            <div class="col-md-4">
-                <button class="btn btn-primary" @onclick="Start" disabled="@isRunning">Start</button>
+
+            <div class="col-12">
+                <button class="btn btn-info me-2" @onclick="FetchTasks" disabled="@isRunning">1. Fetch Tasks</button>
+                <button class="btn btn-success me-2" @onclick="RunSelected" disabled="@(isRunning || BotService.FetchedTasks.Count == 0)">2. Generate Code</button>
                 <button class="btn btn-danger" @onclick="Stop" disabled="@(!isRunning)">Stop</button>
             </div>
         </div>
     </div>
 
-    <div class="card bg-dark text-white p-3" style="height: 400px; overflow-y: auto; font-family: monospace;">
+    @if (BotService.FetchedTasks.Count > 0)
+    {
+        <div class="card p-3 mb-3">
+            <h5 class="card-title">Select Tasks to Process</h5>
+            <div class="row">
+                @foreach (var task in BotService.FetchedTasks)
+                {
+                    <div class="col-md-3 col-sm-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="task.IsSelected" id="@task.Name">
+                            <label class="form-check-label" for="@task.Name">
+                                <strong>@task.Name</strong> <span class="badge bg-secondary">@task.Status</span>
+                            </label>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <div @ref="logContainer" class="card bg-dark text-white p-3 mb-3" style="height: 200px; overflow-y: auto; font-family: monospace;">
         @foreach (var log in logs)
         {
             <div>@log</div>
         }
     </div>
+
+    @if (taskNames.Count > 0)
+    {
+        <ul class="nav nav-tabs mb-3">
+            @foreach (var task in taskNames)
+            {
+                <li class="nav-item">
+                    <button class="nav-link @(activeTask == task ? "active" : "")" 
+                            @onclick="() => activeTask = task">
+                        @task
+                    </button>
+                </li>
+            }
+        </ul>
+
+        @if (!string.IsNullOrEmpty(activeTask))
+        {
+            <div class="row">
+                <div class="col-6">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">Problem: @activeTask</div>
+                        <div class="card-body p-3" style="height: 500px; overflow-y: auto; background-color: white;">
+                             @((MarkupString)GetProblem(activeTask))
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">Solution: @activeTask</div>
+                        <div class="card-body p-0 position-relative">
+                            <pre class="p-3 mb-0" style="height: 500px; overflow-y: auto; background-color: #f8f9fa; font-family: Consolas, monospace;">@GetSolution(activeTask)</pre>
+                            <button class="btn btn-sm btn-light position-absolute top-0 end-0 m-2" 
+                                    @onclick="() => CopyToClipboard(GetSolution(activeTask))">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
 </div>
+
+@inject IJSRuntime JSRuntime
 
 @code {
     private string contestUrl = "https://atcoder.jp/contests/ahc058";
     private bool isRunning = false;
     private List<string> logs = new();
+    
+    // Data storage
+    private List<string> taskNames = new();
+    private Dictionary<string, string> problems = new();
+    private Dictionary<string, string> solutions = new();
+    private string activeTask = "";
 
     protected override void OnInitialized()
     {
         BotService.OnLog += HandleLog;
+        BotService.OnProblemTextReceived += HandleProblem;
+        BotService.OnSolutionGenerated += HandleSolution;
     }
 
-    private async Task Start()
+    private async Task FetchTasks()
     {
         if (string.IsNullOrWhiteSpace(contestUrl)) return;
-        
         isRunning = true;
         logs.Clear();
-        logs.Add("Starting bot...");
+        logs.Add("Fetching tasks...");
         
-        // Run in background to not block UI
-        _ = Task.Run(async () => 
+        await Task.Run(async () => 
         {
             try 
             {
-                await BotService.StartAsync(contestUrl);
+                await BotService.FetchTasksAsync(contestUrl);
+            }
+            finally
+            {
+                await InvokeAsync(() => {
+                    isRunning = false;
+                    StateHasChanged();
+                });
+            }
+        });
+    }
+
+    private async Task RunSelected()
+    {
+        isRunning = true;
+        // clear old results? maybe optional.
+        activeTask = "";
+        
+        await Task.Run(async () => 
+        {
+            try 
+            {
+                await BotService.RunSelectedTasksAsync();
             }
             finally
             {
@@ -69,17 +171,53 @@
         await BotService.StopAsync();
     }
 
-    private void HandleLog(string message)
+    private void HandleProblem(string title, string text)
     {
-        // Update UI thread
         InvokeAsync(() => {
-            logs.Add(message);
+            if (!taskNames.Contains(title)) 
+            {
+                taskNames.Add(title);
+                if (string.IsNullOrEmpty(activeTask)) activeTask = title;
+            }
+            problems[title] = text;
             StateHasChanged();
         });
+    }
+
+    private void HandleSolution(string title, string code)
+    {
+        InvokeAsync(() => {
+            solutions[title] = code;
+            StateHasChanged();
+        });
+    }
+
+    private ElementReference logContainer;
+
+    private void HandleLog(string message)
+    {
+        InvokeAsync(async () => {
+            logs.Add(message);
+            StateHasChanged();
+            try { await JSRuntime.InvokeVoidAsync("scrollToBottom", logContainer); } catch {}
+        });
+    }
+
+    private string GetProblem(string title) => problems.ContainsKey(title) ? problems[title] : "(Loading...)";
+    private string GetSolution(string title) => solutions.ContainsKey(title) ? solutions[title] : "(Waiting for generation...)";
+
+    private async Task CopyToClipboard(string text)
+    {
+        if (!string.IsNullOrEmpty(text))
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        }
     }
 
     public void Dispose()
     {
         BotService.OnLog -= HandleLog;
+        BotService.OnProblemTextReceived -= HandleProblem;
+        BotService.OnSolutionGenerated -= HandleSolution;
     }
 }

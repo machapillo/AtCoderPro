@@ -1,46 +1,37 @@
-# AtCoder Automated Solver (C# Edition)
+# AtCoder Web Bot (Blazor Server)
 
-This tool automates solving AtCoder problems using C# and OpenAI.
-It features **Local Verification**: generated solutions are compiled and tested against sample inputs before submission.
+Web UIを備えたAtCoder自動解答ツールです。
+実行ログのリアルタイム表示、C#コードの生成（GPT-4）、ローカルテスト検証、自動提出機能を提供します。
 
-## Prerequisites
+## 前提条件
+- .NET 8 SDK
+- AtCoderアカウント
+- OpenAI API Key
 
-- **.NET 8 SDK**
-- **OpenAI API Key**
-- **AtCoder Account**
+## セットアップ
+1.  **リポジトリの準備**:
+    ```bash
+    git clone <your-repo-url>
+    git init # (新規作成の場合)
+    ```
+2.  **環境変数**:
+    - `.env.example` をコピーして `.env` を作成します（必須ではありません）。
+    - `OPENAI_API_KEY` を設定してください。
+    - アカウント情報はWeb画面から入力可能です。
 
-## Setup
-
-1.  **Configure Credentials**:
-    - Copy `.env.example` to `.env` in the project root.
-    - Set your `ATCODER_USERNAME`, `ATCODER_PASSWORD`, and `OPENAI_API_KEY`.
-
-2.  **Install Playwright Browsers**:
-    (First run only)
-    ```powershell
-    cd AtCoderBot
-    dotnet build
+3.  **ブラウザのインストール**:
+    ```bash
+    cd AtCoderWeb
     powershell bin/Debug/net8.0/playwright.ps1 install
     ```
 
-## Usage
-
-Run the bot:
-
-```powershell
-dotnet run --project AtCoderBot
+## 実行方法
+```bash
+cd AtCoderWeb
+dotnet run
 ```
+コンソールに表示されるURL（例: `http://localhost:5xxx`）にアクセスしてください。
 
-1.  Enter the Contest URL (e.g. `https://atcoder.jp/contests/ahc058`).
-2.  The bot will:
-    - Log in.
-    - Fetch tasks.
-    - For each task:
-        - Scrape problem & samples.
-        - Generate C# code (via OpenAI).
-        - **Verify**: Run valid inputs locally using `TempSolution`.
-        - **Submit**: If local tests pass, submit to AtCoder.
-
-## Notes
-- Code generation uses `gpt-4o`.
-- Browser runs in **Visible Mode** so you can watch progress.
+## コンソール版からの移行について
+ロジックは `AtCoderWeb/Services/AtCoderService.cs` に移行されました。
+元のコンソールアプリは参照用として残されていますが、メインプロジェクトは `AtCoderWeb` です。
